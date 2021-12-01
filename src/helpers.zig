@@ -544,3 +544,83 @@ pub fn tex_remap(y_in: f32, y_height: usize, y_padding: usize) f32 {
     const total_height = y_height + y_padding;
     return @intToFloat(f32, pixel + y_padding) / @intToFloat(f32, total_height);
 }
+
+pub fn get_char(event: c.SDL_Event) ?u8 {
+    const name = c.SDL_GetKeyName(event.key.keysym.sym);
+    var len: usize = 0;
+    while (name[len] != 0) : (len += 1) {}
+    if (len == 0) return null;
+    var key = name[0];
+    if (std.mem.eql(u8, name[0..len], "Space")) {
+        key = ' ';
+        len = 1;
+    }
+    if (std.mem.eql(u8, name[0..len], "Return")) {
+        key = '\n';
+        len = 1;
+    }
+    if (std.mem.eql(u8, name[0..len], "Keypad Enter")) {
+        key = '\n';
+        len = 1;
+    }
+    // Prevented in typeroo
+    // if (std.mem.eql(u8, name[0..len], "Backspace")) {
+    //     key = 8;
+    //     len = 1;
+    // }
+    // Prevented in typeroo
+    // if (std.mem.eql(u8, name[0..len], "Delete")) {
+    //     key = 127;
+    //     len = 1;
+    // }
+    // Prevented in typeroo
+    // if (std.mem.eql(u8, name[0..len], "Left")) {
+    //     key = 128;
+    //     len = 1;
+    // }
+    // Prevented in typeroo
+    // if (std.mem.eql(u8, name[0..len], "Right")) {
+    //     key = 129;
+    //     len = 1;
+    // }
+    if (len != 1) return null;
+    const mods = c.SDL_GetModState();
+    const caps = (mods & c.KMOD_CAPS) > 0;
+    const shift = (mods & c.KMOD_SHIFT) > 0;
+    if (key_is_letter(key)) {
+        // not xor. We need to handle case where exactly one of caps and shift are active
+        if (caps == shift) key += 32;
+    } else if (shift) {
+        switch (key) {
+            '1' => key = '!',
+            '2' => key = '@',
+            '3' => key = '#',
+            '4' => key = '$',
+            '5' => key = '%',
+            '6' => key = '^',
+            '7' => key = '&',
+            '8' => key = '*',
+            '9' => key = '(',
+            '0' => key = ')',
+            '`' => key = '~',
+            '\\' => key = '|',
+            '[' => key = '{',
+            ']' => key = '}',
+            ';' => key = ':',
+            '\'' => key = '"',
+            ',' => key = '<',
+            '.' => key = '>',
+            '/' => key = '?',
+            '-' => key = '_',
+            '=' => key = '+',
+            else => {},
+        }
+        // we want to handle some of the punctuation things.
+    }
+    return key;
+}
+
+fn key_is_letter(k: u8) bool {
+    // keyname is always caps. so we just check the caps ascii range here
+    return k >= 65 and k <= 90;
+}

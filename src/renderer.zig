@@ -202,7 +202,7 @@ pub const Renderer = struct {
     pub fn render_app(self: *Self, ticks: u32, app: *App) void {
         _ = app;
         self.ticks = ticks;
-        c.glClearColor(0.0, 0.0, 0.0, 1.0);
+        c.glClearColor(37.0 / 255.0, 37.0 / 255.0, 37.0 / 255.0, 1.0);
         c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT);
         self.draw_buffers();
         c.SDL_GL_SwapWindow(self.window);

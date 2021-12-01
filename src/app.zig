@@ -12,6 +12,11 @@ const SingleInput = helpers.SingleInput;
 const MouseState = helpers.MouseState;
 const EditableText = helpers.EditableText;
 const TYPING_BUFFER_SIZE = 16;
+const TYPEROO_LINE_WIDTH = 66;
+// This was checked and addede here.
+const TYPEROO_FONT_WIDTH = 11.6129035;
+const TYPEROO_NUM_LINES = 5;
+const TYPEROO_NUM_BACKSPACE = 8;
 
 const InputKey = enum {
     shift,
@@ -63,6 +68,11 @@ pub const InputState = struct {
     }
 };
 
+const Line = struct {
+    start: usize = 0,
+    end: usize = 0,
+};
+
 pub const App = struct {
     const Self = @This();
     typesetter: TypeSetter = undefined,
@@ -72,20 +82,58 @@ pub const App = struct {
     ticks: u32 = 0,
     quit: bool = false,
     inputs: InputState = .{},
+    typed: EditableText,
+    lines: std.ArrayList(Line),
+    backspace_used: usize = 0,
+    total_line_width: f32 = 0.0,
 
     pub fn new(allocator: *std.mem.Allocator, arena: *std.mem.Allocator) Self {
         return Self{
             .allocator = allocator,
             .arena = arena,
+            .typed = EditableText.init(allocator),
+            .lines = std.ArrayList(Line).init(allocator),
         };
     }
 
     pub fn init(self: *Self) !void {
         try self.typesetter.init(&self.camera, self.allocator);
+        var buf: [TYPEROO_LINE_WIDTH]u8 = undefined;
+        var i: usize = 0;
+        while (i < TYPEROO_LINE_WIDTH) : (i += 1) buf[i] = 'a';
+        self.total_line_width = self.typesetter.get_text_width_font(buf[0..], .debug).x;
     }
 
     pub fn deinit(self: *Self) void {
         self.typesetter.deinit();
+        self.typed.deinit();
+        self.lines.deinit();
+    }
+
+    fn backspace_allowed(self: *Self) bool {
+        return self.backspace_used < TYPEROO_NUM_BACKSPACE;
+    }
+
+    fn check_backspace(self: *Self, event: c.SDL_Event) bool {
+        if (!self.backspace_allowed()) return false;
+        const name = c.SDL_GetKeyName(event.key.keysym.sym);
+        var len: usize = 0;
+        while (name[len] != 0) : (len += 1) {}
+        if (len == 0) return false;
+        if (std.mem.eql(u8, name[0..len], "Backspace")) {
+            return true;
+        }
+        return false;
+    }
+
+    fn update_backspace(self: *Self) void {
+        for (self.inputs.typed[0..self.inputs.num_typed]) |char| {
+            if (char == 8) {
+                self.backspace_used += 1;
+            } else if (self.backspace_used > 0) {
+                self.backspace_used -= 1;
+            }
+        }
     }
 
     pub fn handle_inputs(self: *Self, event: c.SDL_Event) void {
@@ -96,6 +144,8 @@ pub const App = struct {
             for (INPUT_MAPPING) |map| {
                 if (event.key.keysym.sym == map.key) self.inputs.get_key(map.input).set_down(self.ticks);
             }
+            if (helpers.get_char(event)) |k| self.inputs.type_key(k);
+            if (self.check_backspace(event)) self.inputs.type_key(8);
         } else if (event.@"type" == c.SDL_KEYUP) {
             for (INPUT_MAPPING) |map| {
                 if (event.key.keysym.sym == map.key) self.inputs.get_key(map.input).set_release();
@@ -103,17 +153,44 @@ pub const App = struct {
         }
     }
 
+    pub fn check_line(self: *Self) void {
+        self.lines.shrinkRetainingCapacity(0);
+        var start: usize = 0;
+        for (self.typed.text.items) |char, i| {
+            var new_line = false;
+            if (i - start > TYPEROO_LINE_WIDTH) new_line = true;
+            if (char == '\n' or (new_line and char == ' ')) {
+                const line = Line{ .start = start, .end = i };
+                self.lines.append(line) catch unreachable;
+                start = i + 1;
+            }
+        }
+        const line = Line{ .start = start, .end = self.typed.text.items.len };
+        self.lines.append(line) catch unreachable;
+    }
+
     pub fn update(self: *Self, ticks: u32, arena: *std.mem.Allocator) void {
         self.ticks = ticks;
         self.arena = arena;
-        if (self.inputs.get_key(.space).is_down) {
-            const xpos = (@sin(@intToFloat(f32, self.ticks) / 2000.0) * 0.5 + 0.5) * constants.DEFAULT_WINDOW_WIDTH;
-            const ypos = (@sin(@intToFloat(f32, self.ticks) / 1145.0) * 0.5 + 0.5) * constants.DEFAULT_WINDOW_HEIGHT;
-            self.typesetter.draw_text_world_centered_font_color(.{ .x = xpos, .y = ypos }, "SDL here hi!", .debug, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
-        } else {
-            const xpos = 0.5 * constants.DEFAULT_WINDOW_WIDTH;
-            const ypos = 0.5 * constants.DEFAULT_WINDOW_HEIGHT;
-            self.typesetter.draw_text_world_centered_font_color(.{ .x = xpos, .y = ypos }, "Press and hold space", .debug, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
+        self.typed.handle_inputs(self.inputs.typed[0..self.inputs.num_typed]);
+        self.check_line();
+        const xpos = (constants.DEFAULT_WINDOW_WIDTH - self.total_line_width) / 2.0;
+        var ypos = 0.5 * constants.DEFAULT_WINDOW_HEIGHT;
+        var i: usize = self.lines.items.len - 1;
+        var lines_typed: usize = 0;
+        while (true) : (i -= 1) {
+            const line = self.lines.items[i];
+            const alpha: f32 = 1.0 - (@intToFloat(f32, lines_typed) / @intToFloat(f32, TYPEROO_NUM_LINES));
+            self.typesetter.draw_text_world_font_color(.{ .x = xpos, .y = ypos }, self.typed.text.items[line.start..line.end], .debug, .{ .x = 254.0 / 255.0, .y = 206.0 / 255.0, .z = 0.0, .w = alpha });
+            ypos -= 1.2 * glyph_lib.FONT_SIZE;
+            if (i == 0) break;
+            lines_typed += 1;
+            if (lines_typed > TYPEROO_NUM_LINES) break;
         }
+        self.update_backspace();
+    }
+
+    pub fn reset_inputs(self: *Self) void {
+        self.inputs.reset();
     }
 };

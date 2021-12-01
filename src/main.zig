@@ -37,5 +37,6 @@ pub fn main() anyerror!void {
         app.update(ticks, &frame_allocator.allocator);
         renderer.render_app(ticks, &app);
         frame_allocator.deinit();
+        app.reset_inputs();
     }
 }

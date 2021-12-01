@@ -22,7 +22,7 @@ const FONT_FILES = [NUM_FONTS][:0]const u8{
 const DEFAULT_FONT: FontType = .debug;
 pub const FONT_TEX_SIZE = 512;
 const GLYPH_CAPACITY = 2048;
-const FONT_SIZE = 24.0;
+pub const FONT_SIZE = 24.0;
 
 const helpers = @import("helpers.zig");
 const Camera = helpers.Camera;
@@ -232,7 +232,9 @@ pub const TypeSetter = struct {
             const char_offset = self.draw_char_color_font(Vector2.add(pos, offsets), char, 1, camera, color, font);
             offsets = Vector2.add(offsets, char_offset);
             if (offsets.x > width) new_line = true;
-            if (char == '\n' or (new_line and char == ' ')) {
+            // if (char == '\n' or (new_line and char == ' ')) {
+            // typeroo deals with newlines differently
+            if (new_line and char == ' ') {
                 offsets.x = 0.0;
                 offsets.y += FONT_SIZE * 1.2;
                 new_line = false;

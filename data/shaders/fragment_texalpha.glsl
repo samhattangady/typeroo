@@ -14,4 +14,5 @@ void main()
     // float bw = (vert_color.r + vert_color.g + vert_color.b) / 3;
     // frag_color = vec4(bw, bw, bw, col.r*vert_color.a);
     frag_color = vec4(vert_color.rgb, col.r*vert_color.a);
+    // frag_color = vec4(vec3(gl_FragCoord.z), vert_color.a);
 } 
